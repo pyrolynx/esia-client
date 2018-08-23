@@ -1,9 +1,10 @@
 import enum
-import json
 import uuid
 from typing import *
 
-import esia_connector.utils
+import esia_client.utils
+
+__all__ = ['']
 
 
 class Scope(enum.Enum):
@@ -79,7 +80,7 @@ class Auth:
                 str(params.get('state', '')),
         )
 
-        params['client_sercet'] = esia_connector.utils.sign_data(
+        params['client_sercet'] = esia_client.utils.sign_data(
             ''.join(parts), cert_path=self.settings.cert_file, private_key_path=self.settings.private_key_file
         )
 
@@ -99,14 +100,14 @@ class Auth:
             'scope': self.settings.scope_string,
             'response_type': 'code',
             'state': state or str(uuid.uuid4()),
-            'timestamp': esia_connector.utils.get_timestamp(),
+            'timestamp': esia_client.utils.get_timestamp(),
             'access_type': 'offline'
         }
         self._sign_params(params)
 
         return '{base_url}{auth_url}?{params}'.format(base_url=self.settings.esia_service_url,
                                                       auth_url=self._AUTHORIZATION_URL,
-                                                      params=esia_connector.utils.format_uri_params(params))
+                                                      params=esia_client.utils.format_uri_params(params))
 
     def complete_authorization(self, code, state, redirect_uri=None):
         """
@@ -127,7 +128,7 @@ class Auth:
             'code': code,
             'grant_type': 'authorization_code',
             'redirect_uri': redirect_uri or self.settings.redirect_uri,
-            'timestamp': esia_connector.utils.get_timestamp(),
+            'timestamp': esia_client.utils.get_timestamp(),
             'token_type': 'Bearer',
             'scope': self.settings.scope_string,
             'state': str(uuid.uuid4()),
@@ -135,13 +136,13 @@ class Auth:
 
         self._sign_params(params)
 
-        response_json = esia_connector.utils.make_request(
+        response_json = esia_client.utils.make_request(
             url=f"{self.settings.esia_service_url}{self._TOKEN_EXCHANGE_URL}", method='POST', data=params)
 
         print(response_json)
         access_token = response_json['access_token']
         id_token = response_json['id_token']
-        payload = esia_connector.utils.decode_payload(id_token.split('.')[1])
+        payload = esia_client.utils.decode_payload(id_token.split('.')[1])
 
         return EsiaInfo(access_token=access_token,
                         oid=self._get_user_id(payload),
@@ -184,7 +185,7 @@ class EsiaInfo:
         """
         headers = {'Authorization': "Bearer %s" % self.token, 'Accept': 'application/json'}
 
-        return esia_connector.utils.make_request(url=url, headers=headers)
+        return esia_client.utils.make_request(url=url, headers=headers)
 
     def get_person_main_info(self) -> dict:
         """

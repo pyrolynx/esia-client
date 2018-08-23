@@ -8,7 +8,7 @@ import urllib.parse
 import pytz
 import requests
 
-import esia_connector.exceptions
+import esia_client.exceptions
 
 
 def make_request(url: str, method: str ='GET', params: dict = {}, headers: dict = None, data: dict = {}) -> dict:
@@ -22,12 +22,12 @@ def make_request(url: str, method: str ='GET', params: dict = {}, headers: dict 
     try:
         response = requests.request(method, url, params=params, headers=headers, data=data)
         if response.status_code == 403:
-            raise esia_connector.exceptions.InaccessableinformationRequestError(params.get('scope', ()))
+            raise esia_client.exceptions.InaccessableinformationRequestError(params.get('scope', ()))
         return response.json()
     except requests.HTTPError as e:
-        raise esia_connector.exceptions.HttpError(e)
+        raise esia_client.exceptions.HttpError(e)
     except ValueError as e:
-        raise esia_connector.exceptions.IncorrectJsonError(e)
+        raise esia_client.exceptions.IncorrectJsonError(e)
 
 
 def sign_data(data: str, cert_path: str, private_key_path: str) -> str:
@@ -58,7 +58,7 @@ def sign_data(data: str, cert_path: str, private_key_path: str) -> str:
 
     raw_client_secret = open(destination_file.name, 'rb').read()
     if not raw_client_secret:
-        raise esia_connector.exceptions.SignatureError
+        raise esia_client.exceptions.SignatureError
 
     return base64.urlsafe_b64encode(raw_client_secret).decode().rstrip('=')
 
@@ -83,7 +83,7 @@ def decode_payload(base64string: str) -> dict:
     try:
         return json.loads(base64.urlsafe_b64decode(base64string))
     except (ValueError, Exception) as e:
-        raise esia_connector.exceptions.IncorrectMarkerError(e)
+        raise esia_client.exceptions.IncorrectMarkerError(e)
 
 
 def format_uri_params(params: dict) -> str:
