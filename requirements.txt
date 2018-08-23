@@ -1,0 +1,3 @@
+Flask==0.10.1
+pytz==2015.7
+requests==2.8.1
