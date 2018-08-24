@@ -58,6 +58,7 @@ class UserInfo:
     """
     Клиент получения пользовательских данных из ЕСИА
     """
+
     def __init__(self, access_token: str, oid: str, settings: Settings):
         """
         Args:
@@ -149,13 +150,13 @@ class Auth:
 
         """
         parts = (
-                str(params.get('scope', '')),
-                params.get('timestamp', ''),
-                params.get('client_id', ''),
-                str(params.get('state', '')),
+            str(params.get('scope', '')),
+            params.get('timestamp', ''),
+            params.get('client_id', ''),
+            str(params.get('state', '')),
         )
 
-        params['client_sercet'] = esia_client.utils.sign_data(
+        params['client_secret'] = esia_client.utils.sign(
             ''.join(parts), cert_path=self.settings.cert_file, private_key_path=self.settings.private_key_file
         )
 
@@ -194,21 +195,11 @@ class Auth:
             state: идентификатор сессии авторизации в формате `uuid.UUID`
             redirect_uri: URL для переадресации после авторизации
 
-        Returns:
+        Raises:
 
-        """
-
-        """
-        Exchanges received code and state to access token, validates token (optionally), extracts ESIA user id from
-        token and returns ESIAInformationConnector instance.
-        :type code: str
-        :type state: str
-        :param boolean validate_token: perform token validation
-        :param str or None redirect_uri: uri, where browser will be redirected after authorization.
-        :rtype: UserInfo
-        :raises IncorrectJsonError: if response contains invalid json body
-        :raises HttpError: if response status code is not 2XX
-        :raises IncorrectMarkerError: if validate_token set to True and received token cannot be validated
+            IncorrectJsonError: Неверный формат JSON-ответа
+            HttpError: Ошибка сети или сервера
+            IncorrectMarkerError: Неверный формат токена
         """
 
         params = {
@@ -244,4 +235,3 @@ class Auth:
             return payload['urn:esia:sbj']['urn:esia:sbj:oid']
         except KeyError:
             raise esia_client.exceptions.IncorrectMarkerError(payload)
-

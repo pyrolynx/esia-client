@@ -1,12 +1,13 @@
 from distutils.core import setup
 
 
-install_requires = ['requests', 'pytz', 'cryptography']
+with open('requirements.txt') as f:
+    install_requires = f.readlines()
 
 
 setup(
     name='esia-client',
-    version='0.1',
+    version='0.2',
     description='Клиент для авторизации через ЕСИА',
     author='Kirill Churkin',
     author_email='briizzzz@mail.ru',

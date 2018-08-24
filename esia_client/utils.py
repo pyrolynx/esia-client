@@ -7,6 +7,7 @@ import urllib.parse
 
 import pytz
 import requests
+import OpenSSL.crypto as crypto
 
 import esia_client.exceptions
 
@@ -30,7 +31,7 @@ def make_request(url: str, method: str ='GET', params: dict = {}, headers: dict 
         raise esia_client.exceptions.IncorrectJsonError(e)
 
 
-def sign_data(data: str, cert_path: str, private_key_path: str) -> str:
+def sign(data: str, cert_path: str, private_key_path: str) -> str:
     """
     Подписывает параметры запроса цифровой подписью. Закодированную подпись кладет в параметры с ключом client_secret
 
@@ -40,27 +41,17 @@ def sign_data(data: str, cert_path: str, private_key_path: str) -> str:
         private_key_path: Путь до приватного ключа
 
     """
-    with tempfile.NamedTemporaryFile(mode='w') as source_file,\
-        tempfile.NamedTemporaryFile(mode='wb') as destination_file:
-        source_file.write(data)
 
-        cmd = 'openssl dgst  -sign -md sha256 -in {f_in} -signer {cert} -inkey {key} -out {f_out} -outform DER'
-        # You can verify this signature using:
-        # openssl smime -verify -inform DER -in out.msg -content msg.txt -noverify \
-        # -certfile ../key/septem_sp_saprun_com.crt
+    crt = crypto.load_certificate(crypto.FILETYPE_PEM, open(cert_path, 'rb').read())
+    pkey = crypto.load_privatekey(crypto.FILETYPE_PEM, open(private_key_path, 'rb').read())
 
-        os.system(cmd.format(
-            f_in=source_file.name,
-            cert=cert_path,
-            key=private_key_path,
-            f_out=destination_file.name,
-        ))
-
-    raw_client_secret = open(destination_file.name, 'rb').read()
-    if not raw_client_secret:
-        raise esia_client.exceptions.SignatureError
-
-    return base64.urlsafe_b64encode(raw_client_secret).decode().rstrip('=')
+    bio_in = crypto._new_mem_buf(data.encode())
+    PKCS7_DETACHED = 0x40
+    pkcs7 = crypto._lib.PKCS7_sign(crt._x509, pkey._pkey, crypto._ffi.NULL, bio_in, PKCS7_DETACHED)
+    bio_out = crypto._new_mem_buf()
+    crypto._lib.i2d_PKCS7_bio(bio_out, pkcs7)
+    sigbytes = crypto._bio_to_string(bio_out)
+    return base64.urlsafe_b64encode(sigbytes).decode()
 
 
 def get_timestamp() -> str:
