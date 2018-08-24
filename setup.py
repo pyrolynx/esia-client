@@ -13,5 +13,5 @@ setup(
     url='https://github.com/pyrolynx/esia-client',
     license='BSD',
     packages=['esia_client'],
-    requires=install_requires,
+    install_requires=install_requires,
 )
