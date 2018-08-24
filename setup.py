@@ -1,8 +1,7 @@
 from distutils.core import setup
 
 
-with open('requirements.txt') as f:
-    install_requires = f.readlines()
+install_requires = ['pytz==2015.7', 'requests==2.8.1', 'pyOpenSSL==18.0.0']
 
 
 setup(

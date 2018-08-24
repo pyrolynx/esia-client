@@ -1,18 +1,16 @@
 import base64
-import json
-import os
 import datetime
-import tempfile
+import json
 import urllib.parse
 
+import OpenSSL.crypto as crypto
 import pytz
 import requests
-import OpenSSL.crypto as crypto
 
 import esia_client.exceptions
 
 
-def make_request(url: str, method: str ='GET', params: dict = {}, headers: dict = None, data: dict = {}) -> dict:
+def make_request(url: str, method: str ='GET', params: dict = None, headers: dict = None, data: dict = None) -> dict:
     """
     Делает запрос по указанному URL с параметрами и возвращает словарь из JSON-ответа
 
