@@ -17,7 +17,7 @@ class HttpError(EsiaError, requests.exceptions.HTTPError):
     pass
 
 
-class InaccessableinformationRequestError(EsiaError):
+class InaccessableInformationRequestError(EsiaError):
     pass
 
 

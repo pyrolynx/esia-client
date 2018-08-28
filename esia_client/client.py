@@ -2,10 +2,12 @@ import enum
 import uuid
 from typing import *
 
-import esia_client.utils
-import esia_client.exceptions
+from OpenSSL import crypto
 
-__all__ = ['Settings', 'Scope', 'Auth']
+import esia_client.exceptions
+import esia_client.utils
+
+__all__ = ['Settings', 'Scope', 'Auth', 'UserInfo']
 
 
 class Scope(enum.Enum):
@@ -44,10 +46,12 @@ class Settings:
         """
         self.esia_client_id = esia_client_id
         self.redirect_uri = redirect_uri
-        self.cert_file = cert_file
-        self.private_key_file = private_key_file
         self.esia_service_url = esia_service_url
         self.scopes = tuple(scopes)
+        with open(cert_file, 'rb') as cert_file, \
+                open(private_key_file, 'rb') as pkey_file:
+            self._crt = crypto.load_certificate(crypto.FILETYPE_PEM, cert_file.read())
+            self._pkey = crypto.load_privatekey(crypto.FILETYPE_PEM, pkey_file.read())
 
     @property
     def scope_string(self):
@@ -156,9 +160,7 @@ class Auth:
             str(params.get('state', '')),
         )
 
-        params['client_secret'] = esia_client.utils.sign(
-            ''.join(parts), cert_path=self.settings.cert_file, private_key_path=self.settings.private_key_file
-        )
+        params['client_secret'] = esia_client.utils.sign(''.join(parts), self.settings._crt, self.settings._pkey)
 
     def get_auth_url(self, state: Union[str, uuid.UUID] = uuid.uuid4(), redirect_uri=None):
         """

@@ -4,13 +4,14 @@ import json
 import urllib.parse
 
 import OpenSSL.crypto as crypto
+import aiohttp
 import pytz
 import requests
 
 import esia_client.exceptions
 
 
-def make_request(url: str, method: str ='GET', params: dict = None, headers: dict = None, data: dict = None) -> dict:
+def make_request(url: str, method: str = 'GET', params: dict = None, headers: dict = None, data: dict = None) -> dict:
     """
     Делает запрос по указанному URL с параметрами и возвращает словарь из JSON-ответа
 
@@ -21,7 +22,7 @@ def make_request(url: str, method: str ='GET', params: dict = None, headers: dic
     try:
         response = requests.request(method, url, params=params, headers=headers, data=data)
         if response.status_code == 403:
-            raise esia_client.exceptions.InaccessableinformationRequestError(params.get('scope', ()))
+            raise esia_client.exceptions.InaccessableInformationRequestError((params or {}).get('scope', ()))
         return response.json()
     except requests.HTTPError as e:
         raise esia_client.exceptions.HttpError(e)
@@ -29,21 +30,38 @@ def make_request(url: str, method: str ='GET', params: dict = None, headers: dic
         raise esia_client.exceptions.IncorrectJsonError(e)
 
 
-def sign(data: str, cert_path: str, private_key_path: str) -> str:
+async def make_async_request(
+        url: str, method: str = 'GET', params: dict = None, headers: dict = None, data: dict = None) -> dict:
     """
-    Подписывает параметры запроса цифровой подписью. Закодированную подпись кладет в параметры с ключом client_secret
+    Делает асинхронный запрос по указанному URL с параметрами и возвращает словарь из JSON-ответа
+
+    Raises:
+        HttpError: Ошибка сети или вебсервера
+        IncorrectJsonError: Ошибка парсинга JSON-ответа
+    """
+    try:
+        async with aiohttp.client.ClientSession() as session:
+            async with session.request(method, url, params=params, headers=headers, data=data) as response:
+                if response.status == 403:
+                    raise esia_client.exceptions.InaccessableInformationRequestError((params or {}).get('scope', ()))
+                return await response.json()
+    except aiohttp.client.ClientError as e:
+        raise esia_client.exceptions.HttpError(e)
+    except ValueError as e:
+        raise esia_client.exceptions.IncorrectJsonError(e)
+
+
+def sign(content: str, crt: crypto.X509, pkey: crypto.PKey) -> str:
+    """
+    Подписывает параметры запроса цифровой подписью
 
     Args:
         data: Данные, которые необходимо подписать
-        cert_path: Путь до сертификата
-        private_key_path: Путь до приватного ключа
+        crt: Путь до сертификата
+        pkey: Путь до приватного ключа
 
     """
-
-    crt = crypto.load_certificate(crypto.FILETYPE_PEM, open(cert_path, 'rb').read())
-    pkey = crypto.load_privatekey(crypto.FILETYPE_PEM, open(private_key_path, 'rb').read())
-
-    bio_in = crypto._new_mem_buf(data.encode())
+    bio_in = crypto._new_mem_buf(content.encode())
     PKCS7_DETACHED = 0x40
     pkcs7 = crypto._lib.PKCS7_sign(crt._x509, pkey._pkey, crypto._ffi.NULL, bio_in, PKCS7_DETACHED)
     bio_out = crypto._new_mem_buf()
