@@ -11,7 +11,6 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-
 # Distribution / packaging
 .Python
 .python-version
@@ -24,3 +23,5 @@ env/
 pip-log.txt
 pip-delete-this-directory.txt
 
+# Mac Environ
+.DS_Store
