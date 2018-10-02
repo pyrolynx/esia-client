@@ -33,6 +33,11 @@ def make_request(url: str, method: str = 'GET', **kwargs) -> dict:
         logger.debug(f'Status {response.status_code} from {method} request to {url} with {kwargs}')
         if response.status_code == 403:
             raise esia_client.exceptions.InaccessableInformationRequestError(kwargs.get('params', {}).get('scope', ()))
+        elif response.headers.get('content-type') != 'application/json':
+            logger.error(f'{response.headers.get("content-type")} -> {response.text}')
+            raise esia_client.exceptions.IncorrectJsonError(
+                f'Invalid content type -> {response.headers.get("content-type")}'
+            )
         return response.json()
     except requests.HTTPError as e:
         logger.error(e, exc_info=True)
@@ -65,6 +70,10 @@ async def make_async_request(
                     raise esia_client.exceptions.InaccessableInformationRequestError(
                         kwargs.get('params', {}).get('scope', ())
                     )
+                elif response.content_type != 'application/json':
+                    text = await response.text()
+                    logger.error(f'{response.content_type} -> {text}')
+                    raise esia_client.exceptions.IncorrectJsonError(f'Invalid content-type {response.content_type}')
                 return await response.json()
     except aiohttp.client.ClientError as e:
         logger.error(e, exc_info=True)
