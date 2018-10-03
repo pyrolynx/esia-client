@@ -76,7 +76,7 @@ async def make_async_request(
                     raise esia_client.exceptions.IncorrectJsonError(
                         f'Invalid content type -> {response.content_type}'
                     )
-                return response.json()
+                return await response.json()
     except aiohttp.client.ClientError as e:
         logger.error(e, exc_info=True)
         raise esia_client.exceptions.HttpError(e)
