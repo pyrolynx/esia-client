@@ -14,6 +14,12 @@ import esia_client.exceptions
 logger = logging.getLogger(__name__)
 
 
+class FoundLocation(esia_client.exceptions.EsiaError):
+    def __init__(self, location: str, *args, **kwargs):
+        super().__init__(*args, kwargs)
+        self.location = location
+
+
 def make_request(url: str, method: str = 'GET', **kwargs) -> dict:
     """
     Делает запрос по указанному URL с параметрами и возвращает словарь из JSON-ответа
@@ -31,10 +37,11 @@ def make_request(url: str, method: str = 'GET', **kwargs) -> dict:
     try:
         response = requests.request(method, url, **kwargs)
         logger.debug(f'Status {response.status_code} from {method} request to {url} with {kwargs}')
-        if response.status_code == 403:
-            raise esia_client.exceptions.InaccessableInformationRequestError(kwargs.get('params', {}).get('scope', ()))
-        elif not response.headers['content-type'].startswith('application/json'):
-            logger.error(f'{response.headers["content-type"]} -> {response.text}')
+        response.raise_for_status()
+        if response.status_code in (200, 302) and response.headers.get('Location'):
+            raise FoundLocation(location=response.headers.get('Location'))
+        elif not response.headers['Content-type'].startswith('application/json'):
+            logger.error(f'{response.headers["Content-type"]} -> {response.text}')
             raise esia_client.exceptions.IncorrectJsonError(
                 f'Invalid content type -> {response.headers["content-type"]}'
             )
@@ -66,10 +73,9 @@ async def make_async_request(
         async with aiohttp.client.ClientSession() as session:
             async with session.request(method, url, **kwargs) as response:
                 logger.debug(f'Status {response.status} from {method} request to {url} with {kwargs}')
-                if response.status == 403:
-                    raise esia_client.exceptions.InaccessableInformationRequestError(
-                        kwargs.get('params', {}).get('scope', ())
-                    )
+                response.raise_for_status()
+                if response.status in (200, 302) and response.headers.get('Location'):
+                    raise FoundLocation(location=response.headers.get('Location'))
                 elif not response.content_type.startswith('application/json'):
                     text = await response.text()
                     logger.error(f'{response.content_type} -> {text}')

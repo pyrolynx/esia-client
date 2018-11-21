@@ -1,4 +1,6 @@
 import enum
+import time
+import urllib.parse
 import uuid
 from typing import *
 
@@ -27,6 +29,8 @@ class Scope(enum.Enum):
     Birthplace = 'birthplace'
     Email = 'email'
     Phone = 'mobile'
+    Biometry = 'bio'
+    VerificationResult = 'ext_auth_result'
 
     def __str__(self):
         return self.value
@@ -79,6 +83,10 @@ class UserInfo:
         self.oid = oid
         self.settings = settings
         self._rest_base_url = '%s/rs' % settings.esia_service_url
+
+    @property
+    def as_dict(self):
+        return {'oid': self.oid, 'token': self.token}
 
     def _request(self, url: str) -> dict:
         """
@@ -170,13 +178,17 @@ class Auth:
         params['client_secret'] = esia_client.utils.sign(''.join(parts), self.settings._crt, self.settings._pkey)
         logger.info(f'Sign request params. Client secret size: {len(params["client_secret"])}')
 
-    def get_auth_url(self, state: Union[str, uuid.UUID] = uuid.uuid4(), redirect_uri=None):
+    def get_auth_url(self,
+                     state: Union[str, uuid.UUID] = uuid.uuid4(),
+                     redirect_uri=None, scopes: List[Scope] = None,
+                     **kwargs: dict):
         """
         Генерация URL перехода на сайт ЕСИА для авторизации пользователя
 
         Args:
             state: идентификатор запроса
             redirect_uri: ссылка для перенаправления пользователя после авторизации
+            scopes: разрешения на действия с данными учетной записи `esia_client.Scope`
 
         Returns:
             Ссылка авторизации
@@ -184,11 +196,12 @@ class Auth:
         params = {
             'client_id': self.settings.esia_client_id,
             'redirect_uri': redirect_uri or self.settings.redirect_uri,
-            'scope': self.settings.scope_string,
+            'scope': ' '.join([str(x) for x in scopes]) if scopes else self.settings.scope_string,
             'response_type': 'code',
             'state': state or str(uuid.uuid4()),
             'timestamp': esia_client.utils.get_timestamp(),
-            'access_type': 'offline'
+            'access_type': 'offline',
+            **kwargs,
         }
         self._sign_params(params)
 
@@ -196,7 +209,10 @@ class Auth:
                                                       auth_url=self._AUTHORIZATION_URL,
                                                       params=esia_client.utils.format_uri_params(params))
 
-    def complete_authorization(self, code, state: str = None, redirect_uri: str = None) -> UserInfo:
+    def complete_authorization(self, code,
+                               state: str = None,
+                               redirect_uri: str = None,
+                               scopes: List[Scope] = None) -> UserInfo:
         """
         Полученение токена авторизации и клиента запроса информации
 
@@ -204,6 +220,7 @@ class Auth:
             code: код авторизации
             state: идентификатор сессии авторизации в формате `uuid.UUID`
             redirect_uri: URL для переадресации после авторизации
+            scopes: разрешения на действия с данными учетной записи `esia_client.Scope`
 
         Raises:
 
@@ -223,7 +240,7 @@ class Auth:
             'redirect_uri': redirect_uri or self.settings.redirect_uri,
             'timestamp': esia_client.utils.get_timestamp(),
             'token_type': 'Bearer',
-            'scope': self.settings.scope_string,
+            'scope': ' '.join([str(x) for x in scopes]) if scopes else self.settings.scope_string,
             'state': state,
         }
 
@@ -254,3 +271,49 @@ class Auth:
             return user_id
         except KeyError:
             raise esia_client.exceptions.IncorrectMarkerError(payload)
+
+
+class EBS:
+    _HOST_PREFIX = 'https://ebs-int.rtlabs.ru'
+    _START_URL = '/api/v2/verifications'
+    _RESULT_URL = '/api/v2/verifications/{sessid}/result'
+
+    def __init__(self, oid: str, token: str, settings: Settings, host_prefix: str = None, session_id: str = None):
+        self.oid = oid
+        self.token = token
+        self.settings = settings
+        self.host = host_prefix or self._HOST_PREFIX
+        self.session_id = session_id
+
+    @property
+    def as_dict(self):
+        return {'oid': self.oid, 'token': self.token, 'host_prefix': self.host, 'session_id': self.session_id}
+
+    def start_verification(self, redirect_uri: str = None) -> str:
+        try:
+            response = esia_client.utils.make_request(
+                f'{self.host}{self._START_URL}',
+                method='POST',
+                headers=dict(Authorization=f'Bearer {self.token}'),
+                params=dict(redirect=redirect_uri or self.settings.redirect_uri),
+                json=dict(
+                    metadata=dict(
+                        date=str(int(time.time())),
+                        user_id=str(self.oid),
+                        info_system=self.settings.esia_client_id,
+                        idp='ESIA',
+                    )))
+        except esia_client.utils.FoundLocation as e:
+            logger.info(f'HTTP Found  at {e.location}')
+            self.session_id = urllib.parse.urlparse(e.location).query.split('&')[0].split('=')[1]
+
+            return e.location
+
+        raise esia_client.exceptions.EsiaError(f'Unexpected response: {response}', )
+
+    def get_result(self):
+        response = esia_client.utils.make_request(f'{self.host}{self._RESULT_URL.format(sessid=self.session_id)}',
+                                                  headers=dict(Authorization=f'Bearer {self.token}'))
+
+        payload = esia_client.utils.decode_payload(response['extended_result'].split('.')[1])
+        return payload
