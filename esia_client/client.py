@@ -1,14 +1,14 @@
 import enum
+import logging
 import time
-import urllib.parse
 import uuid
 from typing import *
 
+import furl
 from OpenSSL import crypto
 
 import esia_client.exceptions
 import esia_client.utils
-import logging
 
 __all__ = ['Settings', 'Scope', 'Auth', 'UserInfo']
 
@@ -305,7 +305,7 @@ class EBS:
                     )))
         except esia_client.utils.FoundLocation as e:
             logger.info(f'HTTP Found  at {e.location}')
-            self.session_id = urllib.parse.urlparse(e.location).query.split('&')[0].split('=')[1]
+            self.session_id = furl.furl(e.location).args['session_id']
 
             return e.location
 
