@@ -1,8 +1,9 @@
-import time
-import urllib.parse
-import uuid
 import logging
+import time
+import uuid
 from typing import List
+
+import furl
 
 import esia_client
 from esia_client import Scope
@@ -35,7 +36,7 @@ class AsyncUserInfo(esia_client.UserInfo):
         Получение общей информации о пользователе
         """
 
-        url = '{base}/prns/{oid}'.format(base=self._rest_base_url, oid=self.oid)
+        url = self._rest_base_url / 'prns' / self.oid
         return await self._request(url=url)
 
     async def get_person_addresses(self) -> dict:
@@ -43,28 +44,31 @@ class AsyncUserInfo(esia_client.UserInfo):
         Получение адресов регистрации пользователя
         """
 
-        url = '{base}/prns/{oid}/addrs?embed=(elements)'.format(base=self._rest_base_url, oid=self.oid)
+        url = self._rest_base_url / 'prns' / self.oid / 'addrs'
+        url.args['embed'] = '(elements)'
         return await self._request(url=url)
 
     async def get_person_contacts(self) -> dict:
         """
         Получение пользовательский контактов
         """
-        url = '{base}/prns/{oid}/ctts?embed=(elements)'.format(base=self._rest_base_url, oid=self.oid)
+        url = self._rest_base_url / 'prns' / self.oid / 'ctts'
+        url.args['embed'] = '(elements)'
         return await self._request(url=url)
 
     async def get_person_documents(self) -> dict:
         """
         Получение пользовательских документов
         """
-        url = '{base}/prns/{oid}/docs?embed=(elements)'.format(base=self._rest_base_url, oid=self.oid)
+        url = self._rest_base_url / 'prns' / self.oid / 'docs'
+        url.args['embed'] = '(elements)'
         return await self._request(url=url)
 
     async def get_person_passport(self, doc_id: int) -> dict:
         """
         Получение документа удостоверяющего личность пользователя
         """
-        url = '{base}/prns/{oid}/docs/{doc_id}'.format(base=self._rest_base_url, oid=self.oid, doc_id=doc_id)
+        url = self._rest_base_url / 'prns' / self.oid / 'docs' / str(doc_id)
         return await self._request(url=url)
 
 
@@ -98,7 +102,7 @@ class AsyncAuth(esia_client.Auth):
             'client_id': self.settings.esia_client_id,
             'code': code,
             'grant_type': 'authorization_code',
-            'redirect_uri': redirect_uri or self.settings.redirect_uri,
+            'redirect_uri': str(redirect_uri or self.settings.redirect_uri),
             'timestamp': esia_client.utils.get_timestamp(),
             'token_type': 'Bearer',
             'scope': ' '.join([str(x) for x in scopes]) if scopes else self.settings.scope_string,
@@ -108,7 +112,7 @@ class AsyncAuth(esia_client.Auth):
         self._sign_params(params)
 
         response_json = await esia_client.utils.make_async_request(
-            url=f"{self.settings.esia_service_url}{self._TOKEN_EXCHANGE_URL}",
+            url=str(self.settings.esia_service_url / self._TOKEN_EXCHANGE_URL),
             method='POST', data=params, timeout=self.settings.timeout
         )
 
@@ -126,10 +130,10 @@ class AsyncEBS(esia_client.EBS):
     async def start_verification(self, redirect_uri: str = None) -> str:
         try:
             response = await esia_client.utils.make_async_request(
-                f'{self.host}{self._START_URL}',
+                str(self.service_url / self._VERIFICATION_URL),
                 method='POST',
                 headers=dict(Authorization=f'Bearer {self.token}'),
-                params=dict(redirect=redirect_uri or self.settings.redirect_uri),
+                params=dict(redirect=str(redirect_uri or self.settings.redirect_uri)),
                 json=dict(
                     metadata=dict(
                         date=str(int(time.time())),
@@ -139,7 +143,7 @@ class AsyncEBS(esia_client.EBS):
                     )))
         except esia_client.utils.FoundLocation as e:
             logger.info(f'HTTP Found  at {e.location}')
-            self.session_id = urllib.parse.urlparse(e.location).query.split('&')[0].split('=')[1]
+            self.session_id = furl.furl(e.location).args['session_id']
 
             return e.location
 
@@ -147,8 +151,9 @@ class AsyncEBS(esia_client.EBS):
 
     async def get_result(self):
         response = await esia_client.utils.make_async_request(
-            f'{self.host}{self._RESULT_URL.format(sessid=self.session_id)}'
-            , headers=dict(Authorization=f'Bearer {self.token}'))
+            str(self.service_url / self._VERIFICATION_URL / str(self.session_id) / 'result'),
+            headers=dict(Authorization=f'Bearer {self.token}')
+        )
         payload = esia_client.utils.decode_payload(response['extended_result'].split('.')[1])
         logger.debug(f'Verifcation result: {payload}')
         return payload

@@ -5,7 +5,7 @@ install_requires = ['pytz==2018.5', 'pyOpenSSL==18.0.0', 'furl==2.0.0']
 
 setup(
     name='esia-client',
-    version='0.3.1',
+    version='0.4.0',
     description='Клиент для авторизации через ЕСИА',
     author='Kirill Churkin',
     author_email='briizzzz@mail.ru',

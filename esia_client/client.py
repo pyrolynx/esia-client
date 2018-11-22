@@ -52,9 +52,9 @@ class Settings:
             request_timeout: таймаут HTTP запросов
 
         """
-        self.esia_client_id = esia_client_id
-        self.redirect_uri = redirect_uri
-        self.esia_service_url = esia_service_url
+        self.esia_client_id = str(esia_client_id)
+        self.redirect_uri = furl.furl(redirect_uri)
+        self.esia_service_url = furl.furl(esia_service_url)
         self.scopes = tuple(scopes)
         self.timeout = request_timeout
         with open(cert_file, 'rb') as cert_file, \
@@ -80,9 +80,9 @@ class UserInfo:
             settings: настройки клиента ЕСИА
         """
         self.token = access_token
-        self.oid = oid
+        self.oid = str(oid)
         self.settings = settings
-        self._rest_base_url = '%s/rs' % settings.esia_service_url
+        self._rest_base_url = settings.esia_service_url / 'rs'
 
     @property
     def as_dict(self):
@@ -103,14 +103,14 @@ class UserInfo:
         headers = {'Authorization': "Bearer %s" % self.token, 'Accept': 'application/json'}
         logger.info(f'Sending info request to; {url}')
 
-        return esia_client.utils.make_request(url=url, headers=headers, timeout=self.settings.timeout)
+        return esia_client.utils.make_request(url=str(url), headers=headers, timeout=self.settings.timeout)
 
     def get_person_main_info(self) -> dict:
         """
         Получение общей информации о пользователе
         """
 
-        url = '{base}/prns/{oid}'.format(base=self._rest_base_url, oid=self.oid)
+        url = self._rest_base_url / 'prns' / self.oid
         return self._request(url=url)
 
     def get_person_addresses(self) -> dict:
@@ -118,28 +118,28 @@ class UserInfo:
         Получение адресов регистрации пользователя
         """
 
-        url = '{base}/prns/{oid}/addrs?embed=(elements)'.format(base=self._rest_base_url, oid=self.oid)
+        url = (self._rest_base_url / 'prns' / self.oid / 'addrs').add(args={'embed': '(elements)'})
         return self._request(url=url)
 
     def get_person_contacts(self) -> dict:
         """
         Получение пользовательский контактов
         """
-        url = '{base}/prns/{oid}/ctts?embed=(elements)'.format(base=self._rest_base_url, oid=self.oid)
+        url = (self._rest_base_url / 'prns' / self.oid / 'ctts').add(args={'embed': '(elements)'})
         return self._request(url=url)
 
     def get_person_documents(self) -> dict:
         """
         Получение пользовательских документов
         """
-        url = '{base}/prns/{oid}/docs?embed=(elements)'.format(base=self._rest_base_url, oid=self.oid)
+        url = (self._rest_base_url / 'prns' / self.oid / 'docs').add(args={'embed': '(elements)'})
         return self._request(url=url)
 
     def get_person_passport(self, doc_id: int) -> dict:
         """
         Получение документа удостоверяющего личность пользователя
         """
-        url = '{base}/prns/{oid}/docs/{doc_id}'.format(base=self._rest_base_url, oid=self.oid, doc_id=doc_id)
+        url = self._rest_base_url / 'prns' / self.oid / 'docs' / str(doc_id)
         return self._request(url=url)
 
 
@@ -195,7 +195,7 @@ class Auth:
         """
         params = {
             'client_id': self.settings.esia_client_id,
-            'redirect_uri': redirect_uri or self.settings.redirect_uri,
+            'redirect_uri': str(redirect_uri or self.settings.redirect_uri),
             'scope': ' '.join([str(x) for x in scopes]) if scopes else self.settings.scope_string,
             'response_type': 'code',
             'state': state or str(uuid.uuid4()),
@@ -204,10 +204,7 @@ class Auth:
             **kwargs,
         }
         self._sign_params(params)
-
-        return '{base_url}{auth_url}?{params}'.format(base_url=self.settings.esia_service_url,
-                                                      auth_url=self._AUTHORIZATION_URL,
-                                                      params=esia_client.utils.format_uri_params(params))
+        return str((self.settings.esia_service_url / self._AUTHORIZATION_URL).add(args=params))
 
     def complete_authorization(self, code,
                                state: str = None,
@@ -237,7 +234,7 @@ class Auth:
             'client_id': self.settings.esia_client_id,
             'code': code,
             'grant_type': 'authorization_code',
-            'redirect_uri': redirect_uri or self.settings.redirect_uri,
+            'redirect_uri': str(redirect_uri or self.settings.redirect_uri),
             'timestamp': esia_client.utils.get_timestamp(),
             'token_type': 'Bearer',
             'scope': ' '.join([str(x) for x in scopes]) if scopes else self.settings.scope_string,
@@ -247,7 +244,7 @@ class Auth:
         self._sign_params(params)
 
         response_json = esia_client.utils.make_request(
-            url=f"{self.settings.esia_service_url}{self._TOKEN_EXCHANGE_URL}",
+            url=str(self.settings.esia_service_url / self._TOKEN_EXCHANGE_URL),
             method='POST', data=params, timeout=self.settings.timeout,
         )
 
@@ -274,28 +271,27 @@ class Auth:
 
 
 class EBS:
-    _HOST_PREFIX = 'https://ebs-int.rtlabs.ru'
-    _START_URL = '/api/v2/verifications'
-    _RESULT_URL = '/api/v2/verifications/{sessid}/result'
+    _SERIVCE_URL = 'https://ebs-int.rtlabs.ru'
+    _VERIFICATION_URL = '/api/v2/verifications'
 
-    def __init__(self, oid: str, token: str, settings: Settings, host_prefix: str = None, session_id: str = None):
+    def __init__(self, oid: str, token: str, settings: Settings, service_url: str = None, session_id: str = None):
         self.oid = oid
         self.token = token
         self.settings = settings
-        self.host = host_prefix or self._HOST_PREFIX
+        self.service_url = furl.furl(service_url or self._SERIVCE_URL)
         self.session_id = session_id
 
     @property
     def as_dict(self):
-        return {'oid': self.oid, 'token': self.token, 'host_prefix': self.host, 'session_id': self.session_id}
+        return {'oid': self.oid, 'token': self.token, 'host_prefix': self.service_url, 'session_id': self.session_id}
 
     def start_verification(self, redirect_uri: str = None) -> str:
         try:
             response = esia_client.utils.make_request(
-                f'{self.host}{self._START_URL}',
+                str(self.service_url / self._VERIFICATION_URL),
                 method='POST',
                 headers=dict(Authorization=f'Bearer {self.token}'),
-                params=dict(redirect=redirect_uri or self.settings.redirect_uri),
+                params=dict(redirect=str(redirect_uri or self.settings.redirect_uri)),
                 json=dict(
                     metadata=dict(
                         date=str(int(time.time())),
@@ -312,8 +308,10 @@ class EBS:
         raise esia_client.exceptions.EsiaError(f'Unexpected response: {response}', )
 
     def get_result(self):
-        response = esia_client.utils.make_request(f'{self.host}{self._RESULT_URL.format(sessid=self.session_id)}',
-                                                  headers=dict(Authorization=f'Bearer {self.token}'))
+        response = esia_client.utils.make_request(
+            self.service_url / self._VERIFICATION_URL / str(self.session_id) / 'result',
+            headers=dict(Authorization=f'Bearer {self.token}')
+        )
 
         payload = esia_client.utils.decode_payload(response['extended_result'].split('.')[1])
         return payload
