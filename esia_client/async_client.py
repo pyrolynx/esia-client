@@ -29,7 +29,7 @@ class AsyncUserInfo(esia_client.UserInfo):
         headers = {'Authorization': "Bearer %s" % self.token, 'Accept': 'application/json'}
         logger.info(f'Sending info request to; {url}')
 
-        return await esia_client.utils.make_async_request(url=url, headers=headers)
+        return await esia_client.utils.make_async_request(url=str(url), headers=headers)
 
     async def get_person_main_info(self) -> dict:
         """
